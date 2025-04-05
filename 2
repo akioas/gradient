@@ -1,0 +1,117 @@
+!apt-get update
+!apt-get install fonts-dejavu-core fonts-liberation ttf-mscorefonts-installer -y
+
+
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+import os
+import random
+from matplotlib.font_manager import FontProperties
+
+# Шаг 1. Генератором случайных чисел всем синаптическим весам wi,j (i = 1,...,
+#n; j = 1,…,k) и порогу чувствительности нейронов присвоить некоторые малые
+#случайные значения.
+
+symbols = ['A', 'B', 'C', 'D']
+
+font_paths = [
+'/usr/share/fonts/truetype/humor-sans/Humor-Sans.ttf',
+'/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
+'/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf',
+'/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf',
+'/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+]
+
+img_size = (28, 28)
+
+def generate_symbol_image(char, font_path):
+  system_font_path = font_path
+  font = ImageFont.truetype(system_font_path, 24)
+  img = Image.new('L', img_size, color=255)
+  draw = ImageDraw.Draw(img)
+  pos = ((img_size[0] - 24) // 2, (img_size[1] - 24) // 2)
+  draw.text(pos, char, fill=0, font=font)
+  return np.array(img).flatten() / 255.0
+X_train = []
+D_train = []
+# Шаг 2. Подать на входы персептрона x1,…,xn входной образ в виде вектора X =
+#(x1,…,xn).
+for label, char in enumerate(symbols):
+    for font in font_paths[:4]:
+        vector = generate_symbol_image(char, font)
+        X_train.append(vector)
+        one_hot = [0] * 4
+        one_hot[label] = 1
+        D_train.append(one_hot)
+
+X_train = np.array(X_train)
+D_train = np.array(D_train)
+
+X_test = []
+D_test = []
+
+for label, char in enumerate(symbols):
+    vector = generate_symbol_image(char, font_paths[4])
+    X_test.append(vector)
+    one_hot = [0] * 4
+    one_hot[label] = 1
+    D_test.append(one_hot)
+
+X_test = np.array(X_test)
+D_test = np.array(D_test)
+# Шаг 2. Генератором случайных чисел всем синаптическим весам wi,j и
+#нейронным смещениям w0,j (i=0,…,n; j=1,…,k) присваиваются некоторые малые
+#случайные значения.
+n = X_train.shape[1]
+k = D_train.shape[1]
+weights = np.random.uniform(-0.1, 0.1, size=(k, n))
+threshold = 0.0
+epochs = 1000
+tol = 1e-3
+q = X_train.shape[0]
+
+
+# Шаг 3. Общей ошибке Eобщ, вычисляемой на всех обучающих образах и всем
+#значениям коррекции синаптических весов ∆wi,j присвоить нулевое значение.
+
+max_epochs = 100
+for epoch in range(max_epochs):
+    errors = 0
+# Шаг 3. Для каждого j-го нейрона вычислить взв. сумму входных сигналов netj
+#и получить выходной сигнал
+    for x, d in zip(X_train, D_train):
+        for j in range(k):
+            net = np.dot(weights[j], x)
+            y = 1 if net >= threshold else 0 
+# Шаг 4а. Для каждого j-го нейрона определить, соответствует ли полученный
+#выходной сигнал yj желаемому, если нет, то перейти на следующий шаг.
+            if y != d[j]:
+                errors += 1
+# Шаг 4б. Если выходной сигнал yj неправильный и равен нулю, то увеличить
+#веса активных входов: добавить каждому синаптическому весу wi,,j величину i-го
+#входного сигнала xi
+                if y == 0 and d[j] == 1:
+                    weights[j] += x  # положительное подкрепление
+                elif y == 1 and d[j] == 0:
+                    weights[j] -= x  # отрицательное подкрепление
+    print(f"Эпоха {epoch+1}, ошибок: {errors}")
+# Шаг 4в. Если выходной сигнал yj неправильный и равен единице, то
+#уменьшить синаптические веса активных входов, с помощью аналогичной формулы
+    if errors == 0:
+        print("Обучение завершено.")
+        break
+def predict(x):
+    x_bias = np.insert(x, 0, 1)
+    net_outputs = [np.dot(w, x_bias) for w in weights]
+    return np.argmax(net_outputs)
+
+correct = 0
+for i in range(len(X_test)):
+    pred = predict(X_test[i][1:])  
+    true = np.argmax(D_test[i])
+    print(f"Образец {i+1}: Правильный: {symbols[true]}, Предсказано: {symbols[pred]}")
+    if pred == true:
+        correct += 1
+
+accuracy = correct / len(X_test)
+print(f"\nТочность на тестовой выборке: {accuracy:.2%}")
